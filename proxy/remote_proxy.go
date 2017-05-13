@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 )
 
@@ -69,26 +68,27 @@ func (p *RemoteProxy) handle(connection net.Conn) {
 	)
 	defer fmt.Printf("done handling %p\n", connection)
 	defer connection.Close()
-	authBytes := make([]byte, 1024)
-	_, err := connection.Read(authBytes)
-	auth := strings.Replace(string(authBytes), "\n", "", -1)
+	auth := make([]byte, 1024)
+	// receive authentication bytes
+	_, err := connection.Read(auth)
 	if err != nil {
 		fmt.Printf("failed to read authentication\n")
 	} else {
+		remote, err := net.Dial("tcp", p.to)
+		if err != nil {
+			fmt.Printf("error dialing remote host: %s\n", err.Error())
+			return
+		}
+		defer remote.Close()
 		fmt.Printf("remote part authenticated as: %s\n", string(auth))
-		connection.Write([]byte("auth ok"))
+		// send authentication confirmation after connecting to upstream
+		connection.Write([]byte("auth ok, continue"))
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
+		go p.copy(remote, connection, wg)
+		go p.copy(connection, remote, wg)
+		wg.Wait()
 	}
-	remote, err := net.Dial("tcp", p.to)
-	if err != nil {
-		fmt.Printf("error dialing remote host: %s\n", err.Error())
-		return
-	}
-	defer remote.Close()
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go p.copy(remote, connection, wg)
-	go p.copy(connection, remote, wg)
-	wg.Wait()
 }
 
 func (p *RemoteProxy) copy(from, to net.Conn, wg *sync.WaitGroup) {

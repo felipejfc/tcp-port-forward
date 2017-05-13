@@ -74,11 +74,13 @@ func (p *LocalProxy) handle(connection net.Conn) {
 		return
 	}
 	defer remote.Close()
-	_, err = remote.Write([]byte("felipe\n"))
+	// connect to remote proxy and send authentication packet
+	_, err = remote.Write([]byte("felipe-cavalcanti-token"))
 	if err != nil {
 		fmt.Printf("failed to send authentication\n")
 	}
 	authRes := make([]byte, 1024)
+	// wait for remote proxy authentication confirmation
 	_, err = remote.Read(authRes)
 	if err != nil {
 		fmt.Printf("authentication error: %s\n", err.Error())
